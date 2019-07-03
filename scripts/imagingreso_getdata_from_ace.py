@@ -44,9 +44,9 @@ def export_xs_data(path):
     df.to_csv(temp + '/' + fname, index=False, float_format='%g')
 
 
-loc = pd.read_csv('/Users/y9z/Documents/GitHub/openmc/scripts/Lib80x/xsdir', '/t', header=None)
+loc = pd.read_csv('/Users/y9z/Documents/database/Lib80x/xsdir', '/t', header=None)
 
-cwd = '/Users/y9z/Documents/GitHub/openmc/scripts/Lib80x/'
+cwd = '/Users/y9z/Documents/database/Lib80x/'
 
 for each in loc[0]:
     if each.count(' ') > 1:

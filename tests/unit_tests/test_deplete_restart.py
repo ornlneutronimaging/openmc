@@ -4,8 +4,12 @@ These tests run in two steps, a first run then a restart run, a simple test
 problem described in dummy_geometry.py.
 """
 
-from pytest import approx
+from pytest import approx, raises
 import openmc.deplete
+from openmc.deplete import (
+    CECMIntegrator, PredictorIntegrator, CELIIntegrator, LEQIIntegrator,
+    EPCRK4Integrator, CF4Integrator, SICELIIntegrator, SILEQIIntegrator
+)
 
 from tests import dummy_operator
 
@@ -20,20 +24,20 @@ def test_restart_predictor(run_in_tmpdir):
     # Perform simulation using the predictor algorithm
     dt = [0.75]
     power = 1.0
-    openmc.deplete.predictor(op, dt, power, print_out=False)
+    PredictorIntegrator(op, dt, power).integrate()
 
     # Load the files
-    prev_res = openmc.deplete.ResultsList(op.output_dir / "depletion_results.h5")
+    prev_res = openmc.deplete.ResultsList.from_hdf5(op.output_dir / "depletion_results.h5")
 
     # Re-create depletion operator and load previous results
     op = dummy_operator.DummyOperator(prev_res)
     op.output_dir = output_dir
 
     # Perform restarts simulation using the predictor algorithm
-    openmc.deplete.predictor(op, dt, power, print_out=False)
+    PredictorIntegrator(op, dt, power).integrate()
 
     # Load the files
-    res = openmc.deplete.ResultsList(op.output_dir / "depletion_results.h5")
+    res = openmc.deplete.ResultsList.from_hdf5(op.output_dir / "depletion_results.h5")
 
     _, y1 = res.get_atoms("1", "1")
     _, y2 = res.get_atoms("1", "2")
@@ -59,20 +63,22 @@ def test_restart_cecm(run_in_tmpdir):
     # Perform simulation using the MCNPX/MCNP6 algorithm
     dt = [0.75]
     power = 1.0
-    openmc.deplete.cecm(op, dt, power, print_out=False)
+    cecm = CECMIntegrator(op, dt, power)
+    cecm.integrate()
 
     # Load the files
-    prev_res = openmc.deplete.ResultsList(op.output_dir / "depletion_results.h5")
+    prev_res = openmc.deplete.ResultsList.from_hdf5(op.output_dir / "depletion_results.h5")
 
     # Re-create depletion operator and load previous results
     op = dummy_operator.DummyOperator(prev_res)
     op.output_dir = output_dir
 
     # Perform restarts simulation using the MCNPX/MCNP6 algorithm
-    openmc.deplete.cecm(op, dt, power, print_out=False)
+    cecm_restart = CECMIntegrator(op, dt, power)
+    cecm_restart.integrate()
 
     # Load the files
-    res = openmc.deplete.ResultsList(op.output_dir / "depletion_results.h5")
+    res = openmc.deplete.ResultsList.from_hdf5(op.output_dir / "depletion_results.h5")
 
     _, y1 = res.get_atoms("1", "1")
     _, y2 = res.get_atoms("1", "2")
@@ -84,13 +90,12 @@ def test_restart_cecm(run_in_tmpdir):
     assert y1[1] == approx(s1[0])
     assert y2[1] == approx(s1[1])
 
-    assert y1[3] == approx(s2[0])
-    assert y2[3] == approx(s2[1])
+    assert y1[2] == approx(s2[0])
+    assert y2[2] == approx(s2[1])
 
 
 def test_restart_predictor_cecm(run_in_tmpdir):
-    """Integral regression test of integrator algorithm using predictor
-     for the first run then CE/CM for the restart run."""
+    """Test to ensure that schemes with different stages are not compatible"""
 
     op = dummy_operator.DummyOperator()
     output_dir = "test_restart_predictor_cecm"
@@ -99,33 +104,18 @@ def test_restart_predictor_cecm(run_in_tmpdir):
     # Perform simulation using the predictor algorithm
     dt = [0.75]
     power = 1.0
-    openmc.deplete.predictor(op, dt, power, print_out=False)
+    PredictorIntegrator(op, dt, power).integrate()
 
     # Load the files
-    prev_res = openmc.deplete.ResultsList(op.output_dir / "depletion_results.h5")
+    prev_res = openmc.deplete.ResultsList.from_hdf5(op.output_dir / "depletion_results.h5")
 
     # Re-create depletion operator and load previous results
     op = dummy_operator.DummyOperator(prev_res)
     op.output_dir = output_dir
 
-    # Perform restarts simulation using the MCNPX/MCNP6 algorithm
-    openmc.deplete.cecm(op, dt, power, print_out=False)
-
-    # Load the files
-    res = openmc.deplete.ResultsList(op.output_dir / "depletion_results.h5")
-
-    _, y1 = res.get_atoms("1", "1")
-    _, y2 = res.get_atoms("1", "2")
-
-    # Test solution
-    s1 = [2.46847546272295, 0.986431226850467]
-    s2 = [3.09106948392, 0.607102912398]
-
-    assert y1[1] == approx(s1[0])
-    assert y2[1] == approx(s1[1])
-
-    assert y1[2] == approx(s2[0])
-    assert y2[2] == approx(s2[1])
+    # check ValueError is raised, indicating previous and current stages
+    with raises(ValueError, match="incompatible.* 1.*2"):
+        CECMIntegrator(op, dt, power)
 
 
 def test_restart_cecm_predictor(run_in_tmpdir):
@@ -139,34 +129,19 @@ def test_restart_cecm_predictor(run_in_tmpdir):
     # Perform simulation using the MCNPX/MCNP6 algorithm
     dt = [0.75]
     power = 1.0
-    openmc.deplete.cecm(op, dt, power, print_out=False)
+    cecm = CECMIntegrator(op, dt, power)
+    cecm.integrate()
 
     # Load the files
-    prev_res = openmc.deplete.ResultsList(op.output_dir / "depletion_results.h5")
+    prev_res = openmc.deplete.ResultsList.from_hdf5(op.output_dir / "depletion_results.h5")
 
     # Re-create depletion operator and load previous results
     op = dummy_operator.DummyOperator(prev_res)
     op.output_dir = output_dir
 
-    # Perform restarts simulation using the predictor algorithm
-    openmc.deplete.predictor(op, dt, power, print_out=False)
-
-    # Load the files
-    res = openmc.deplete.ResultsList(op.output_dir / "depletion_results.h5")
-
-    _, y1 = res.get_atoms("1", "1")
-    _, y2 = res.get_atoms("1", "2")
-
-    # Test solution
-    s1 = [1.86872629872102, 1.395525772416039]
-    s2 = [3.32776806576, 2.391425905]
-
-    assert y1[1] == approx(s1[0])
-    assert y2[1] == approx(s1[1])
-
-    assert y1[2] == approx(s2[0])
-    assert y2[2] == approx(s2[1])
-
+    # check ValueError is raised, indicating previous and current stages
+    with raises(ValueError, match="incompatible.* 2.*1"):
+        PredictorIntegrator(op, dt, power)
 
 def test_restart_cf4(run_in_tmpdir):
     """Integral regression test of integrator algorithm using CF4."""
@@ -178,20 +153,20 @@ def test_restart_cf4(run_in_tmpdir):
     # Perform simulation
     dt = [0.75]
     power = 1.0
-    openmc.deplete.cf4(op, dt, power, print_out=False)
+    CF4Integrator(op, dt, power).integrate()
 
     # Load the files
-    prev_res = openmc.deplete.ResultsList(op.output_dir / "depletion_results.h5")
+    prev_res = openmc.deplete.ResultsList.from_hdf5(op.output_dir / "depletion_results.h5")
 
     # Re-create depletion operator and load previous results
     op = dummy_operator.DummyOperator(prev_res)
     op.output_dir = output_dir
 
     # Perform restarts simulation
-    openmc.deplete.cf4(op, dt, power, print_out=False)
+    CF4Integrator(op, dt, power).integrate()
 
     # Load the files
-    res = openmc.deplete.ResultsList(op.output_dir / "depletion_results.h5")
+    res = openmc.deplete.ResultsList.from_hdf5(op.output_dir / "depletion_results.h5")
 
     _, y1 = res.get_atoms("1", "1")
     _, y2 = res.get_atoms("1", "2")
@@ -203,8 +178,8 @@ def test_restart_cf4(run_in_tmpdir):
     assert y1[1] == approx(s1[0])
     assert y2[1] == approx(s1[1])
 
-    assert y1[3] == approx(s2[0])
-    assert y2[3] == approx(s2[1])
+    assert y1[2] == approx(s2[0])
+    assert y2[2] == approx(s2[1])
 
 
 def test_restart_epc_rk4(run_in_tmpdir):
@@ -217,20 +192,20 @@ def test_restart_epc_rk4(run_in_tmpdir):
     # Perform simulation
     dt = [0.75]
     power = 1.0
-    openmc.deplete.epc_rk4(op, dt, power, print_out=False)
+    EPCRK4Integrator(op, dt, power).integrate()
 
     # Load the files
-    prev_res = openmc.deplete.ResultsList(op.output_dir / "depletion_results.h5")
+    prev_res = openmc.deplete.ResultsList.from_hdf5(op.output_dir / "depletion_results.h5")
 
     # Re-create depletion operator and load previous results
     op = dummy_operator.DummyOperator(prev_res)
     op.output_dir = output_dir
 
     # Perform restarts simulation
-    openmc.deplete.epc_rk4(op, dt, power, print_out=False)
+    EPCRK4Integrator(op, dt, power).integrate()
 
     # Load the files
-    res = openmc.deplete.ResultsList(op.output_dir / "depletion_results.h5")
+    res = openmc.deplete.ResultsList.from_hdf5(op.output_dir / "depletion_results.h5")
 
     _, y1 = res.get_atoms("1", "1")
     _, y2 = res.get_atoms("1", "2")
@@ -242,8 +217,8 @@ def test_restart_epc_rk4(run_in_tmpdir):
     assert y1[1] == approx(s1[0])
     assert y2[1] == approx(s1[1])
 
-    assert y1[3] == approx(s2[0])
-    assert y2[3] == approx(s2[1])
+    assert y1[2] == approx(s2[0])
+    assert y2[2] == approx(s2[1])
 
 
 def test_restart_celi(run_in_tmpdir):
@@ -256,20 +231,20 @@ def test_restart_celi(run_in_tmpdir):
     # Perform simulation
     dt = [0.75]
     power = 1.0
-    openmc.deplete.celi(op, dt, power, print_out=False)
+    CELIIntegrator(op, dt, power).integrate()
 
     # Load the files
-    prev_res = openmc.deplete.ResultsList(op.output_dir / "depletion_results.h5")
+    prev_res = openmc.deplete.ResultsList.from_hdf5(op.output_dir / "depletion_results.h5")
 
     # Re-create depletion operator and load previous results
     op = dummy_operator.DummyOperator(prev_res)
     op.output_dir = output_dir
 
     # Perform restarts simulation
-    openmc.deplete.celi(op, dt, power, print_out=False)
+    CELIIntegrator(op, dt, power).integrate()
 
     # Load the files
-    res = openmc.deplete.ResultsList(op.output_dir / "depletion_results.h5")
+    res = openmc.deplete.ResultsList.from_hdf5(op.output_dir / "depletion_results.h5")
 
     _, y1 = res.get_atoms("1", "1")
     _, y2 = res.get_atoms("1", "2")
@@ -281,8 +256,8 @@ def test_restart_celi(run_in_tmpdir):
     assert y1[1] == approx(s1[0])
     assert y2[1] == approx(s1[1])
 
-    assert y1[3] == approx(s2[0])
-    assert y2[3] == approx(s2[1])
+    assert y1[2] == approx(s2[0])
+    assert y2[2] == approx(s2[1])
 
 
 def test_restart_leqi(run_in_tmpdir):
@@ -295,20 +270,20 @@ def test_restart_leqi(run_in_tmpdir):
     # Perform simulation
     dt = [0.75]
     power = 1.0
-    openmc.deplete.leqi(op, dt, power, print_out=False)
+    LEQIIntegrator(op, dt, power).integrate()
 
     # Load the files
-    prev_res = openmc.deplete.ResultsList(op.output_dir / "depletion_results.h5")
+    prev_res = openmc.deplete.ResultsList.from_hdf5(op.output_dir / "depletion_results.h5")
 
     # Re-create depletion operator and load previous results
     op = dummy_operator.DummyOperator(prev_res)
     op.output_dir = output_dir
 
     # Perform restarts simulation
-    openmc.deplete.leqi(op, dt, power, print_out=False)
+    LEQIIntegrator(op, dt, power).integrate()
 
     # Load the files
-    res = openmc.deplete.ResultsList(op.output_dir / "depletion_results.h5")
+    res = openmc.deplete.ResultsList.from_hdf5(op.output_dir / "depletion_results.h5")
 
     _, y1 = res.get_atoms("1", "1")
     _, y2 = res.get_atoms("1", "2")
@@ -320,8 +295,8 @@ def test_restart_leqi(run_in_tmpdir):
     assert y1[1] == approx(s1[0])
     assert y2[1] == approx(s1[1])
 
-    assert y1[3] == approx(s2[0])
-    assert y2[3] == approx(s2[1])
+    assert y1[2] == approx(s2[0])
+    assert y2[2] == approx(s2[1])
 
 def test_restart_si_celi(run_in_tmpdir):
     """Integral regression test of integrator algorithm using SI-CELI."""
@@ -333,20 +308,20 @@ def test_restart_si_celi(run_in_tmpdir):
     # Perform simulation
     dt = [0.75]
     power = 1.0
-    openmc.deplete.si_celi(op, dt, power, print_out=False)
+    SICELIIntegrator(op, dt, power).integrate()
 
     # Load the files
-    prev_res = openmc.deplete.ResultsList(op.output_dir / "depletion_results.h5")
+    prev_res = openmc.deplete.ResultsList.from_hdf5(op.output_dir / "depletion_results.h5")
 
     # Re-create depletion operator and load previous results
     op = dummy_operator.DummyOperator(prev_res)
     op.output_dir = output_dir
 
     # Perform restarts simulation
-    openmc.deplete.si_celi(op, dt, power, print_out=False)
+    SICELIIntegrator(op, dt, power).integrate()
 
     # Load the files
-    res = openmc.deplete.ResultsList(op.output_dir / "depletion_results.h5")
+    res = openmc.deplete.ResultsList.from_hdf5(op.output_dir / "depletion_results.h5")
 
     _, y1 = res.get_atoms("1", "1")
     _, y2 = res.get_atoms("1", "2")
@@ -358,8 +333,8 @@ def test_restart_si_celi(run_in_tmpdir):
     assert y1[1] == approx(s1[0])
     assert y2[1] == approx(s1[1])
 
-    assert y1[3] == approx(s2[0])
-    assert y2[3] == approx(s2[1])
+    assert y1[2] == approx(s2[0])
+    assert y2[2] == approx(s2[1])
 
 
 def test_restart_si_leqi(run_in_tmpdir):
@@ -372,20 +347,21 @@ def test_restart_si_leqi(run_in_tmpdir):
     # Perform simulation
     dt = [0.75]
     power = 1.0
-    openmc.deplete.si_leqi(op, dt, power, print_out=False)
+    nstages = 10
+    SILEQIIntegrator(op, dt, power, nstages).integrate()
 
     # Load the files
-    prev_res = openmc.deplete.ResultsList(op.output_dir / "depletion_results.h5")
+    prev_res = openmc.deplete.ResultsList.from_hdf5(op.output_dir / "depletion_results.h5")
 
     # Re-create depletion operator and load previous results
     op = dummy_operator.DummyOperator(prev_res)
     op.output_dir = output_dir
 
     # Perform restarts simulation
-    openmc.deplete.si_leqi(op, dt, power, print_out=False)
+    SILEQIIntegrator(op, dt, power, nstages).integrate()
 
     # Load the files
-    res = openmc.deplete.ResultsList(op.output_dir / "depletion_results.h5")
+    res = openmc.deplete.ResultsList.from_hdf5(op.output_dir / "depletion_results.h5")
 
     _, y1 = res.get_atoms("1", "1")
     _, y2 = res.get_atoms("1", "2")
@@ -397,5 +373,5 @@ def test_restart_si_leqi(run_in_tmpdir):
     assert y1[1] == approx(s1[0])
     assert y2[1] == approx(s1[1])
 
-    assert y1[3] == approx(s2[0])
-    assert y2[3] == approx(s2[1])
+    assert y1[2] == approx(s2[0])
+    assert y2[2] == approx(s2[1])

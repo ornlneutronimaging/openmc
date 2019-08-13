@@ -11,8 +11,12 @@ import os
 from unittest.mock import MagicMock
 
 import numpy as np
-from openmc.deplete import (ReactionRates, Results, ResultsList, comm,
-                            OperatorResult)
+from uncertainties import ufloat
+import pytest
+
+from openmc.deplete import (
+    ReactionRates, Results, ResultsList, comm, OperatorResult,
+    PredictorIntegrator, SICELIIntegrator)
 
 
 def test_results_save(run_in_tmpdir):
@@ -64,8 +68,9 @@ def test_results_save(run_in_tmpdir):
         r1[:] = np.random.rand(2, 2, 2)
 
     # Create global terms
-    eigvl1 = np.random.rand(stages)
-    eigvl2 = np.random.rand(stages)
+    # Col 0: eig, Col 1: uncertainty
+    eigvl1 = np.random.rand(stages, 2)
+    eigvl2 = np.random.rand(stages, 2)
 
     eigvl1 = comm.bcast(eigvl1, root=0)
     eigvl2 = comm.bcast(eigvl2, root=0)
@@ -73,13 +78,15 @@ def test_results_save(run_in_tmpdir):
     t1 = [0.0, 1.0]
     t2 = [1.0, 2.0]
 
-    op_result1 = [OperatorResult(k, rates) for k, rates in zip(eigvl1, rate1)]
-    op_result2 = [OperatorResult(k, rates) for k, rates in zip(eigvl2, rate2)]
+    op_result1 = [OperatorResult(ufloat(*k), rates)
+                  for k, rates in zip(eigvl1, rate1)]
+    op_result2 = [OperatorResult(ufloat(*k), rates)
+                  for k, rates in zip(eigvl2, rate2)]
     Results.save(op, x1, op_result1, t1, 0, 0)
     Results.save(op, x2, op_result2, t2, 0, 1)
 
     # Load the files
-    res = ResultsList("depletion_results.h5")
+    res = ResultsList.from_hdf5("depletion_results.h5")
 
     for i in range(stages):
         for mat_i, mat in enumerate(burn_list):
@@ -94,3 +101,32 @@ def test_results_save(run_in_tmpdir):
 
     np.testing.assert_array_equal(res[1].k, eigvl2)
     np.testing.assert_array_equal(res[1].time, t2)
+
+
+@pytest.mark.parametrize("timesteps", (1, [1]))
+def test_bad_integrator_inputs(timesteps):
+    """Test failure modes for Integrator inputs"""
+
+    op = MagicMock()
+    op.prev_res = None
+    op.chain = None
+    op.heavy_metal = 1.0
+
+    # No power nor power density given
+    with pytest.raises(ValueError, match="Either power or power density"):
+        PredictorIntegrator(op, timesteps)
+
+    # Length of power != length time
+    with pytest.raises(ValueError, match="number of powers"):
+        PredictorIntegrator(op, timesteps, power=[1, 2])
+
+    # Length of power density != length time
+    with pytest.raises(ValueError, match="number of powers"):
+        PredictorIntegrator(op, timesteps, power_density=[1, 2])
+
+    # SI integrator with bad steps
+    with pytest.raises(TypeError, match="n_steps"):
+        SICELIIntegrator(op, timesteps, [1], n_steps=2.5)
+
+    with pytest.raises(ValueError, match="n_steps"):
+        SICELIIntegrator(op, timesteps, [1], n_steps=0)

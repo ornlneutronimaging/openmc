@@ -8,14 +8,14 @@ import openmc.data
 def get_temp(path):
     _temp_key = path[-3]
     temp_dict = {
-        '0': '294K',
+        '0': '294K',  # filename: 89225.800nc
         '1': '600K',
         '2': '900K',
         '3': '1200K',
         '4': '2500K',
         '5': '0K',
         '6': '250K',
-        'a': '294K',
+        'a': '294K',  # filename: Co_058m1_293.6K.ace
     }
     return temp_dict[_temp_key]
 
@@ -49,8 +49,10 @@ loc = pd.read_csv('/Users/y9z/Documents/database/ENDF_B_VII_RT/xsdir', '/t', hea
 
 cwd = '/Users/y9z/Documents/database/ENDF_B_VII_RT/'
 
-for each in loc[0]:
-    sp = each.split(' ')
-    path = cwd + sp[2]
-    print(path)
-    export_xs_data(path)
+print(loc)
+
+# for each in loc[0]:
+#     sp = each.split(' ')
+#     path = cwd + sp[2]
+#     print(path)
+#     export_xs_data(path)

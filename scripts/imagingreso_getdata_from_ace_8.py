@@ -44,15 +44,13 @@ def export_xs_data(path):
     df.to_csv(temp + '/' + fname, index=False, float_format='%g')
 
 
-loc = pd.read_csv('/Users/y9z/Documents/database/Lib80x/xsdir', '/t', header=None)
+loc = pd.read_csv('/Users/y9z/Documents/database/Lib80x/xsdir.csv', ',', header=None)
 
 cwd = '/Users/y9z/Documents/database/Lib80x/'
 
-for each in loc[0]:
-    if each.count(' ') > 1:
-        sp = each.split(' ')
-        path = cwd + sp[2]
-
-        if '/Lib80x/Lib80x/B/5010.8' in path:
-            print(path)
-            export_xs_data(path)
+for each in loc[2]:
+    path = cwd + each
+    # print(path)
+    if '/Lib80x/Lib80x/B/5010.8' in path:
+        print(path)
+        export_xs_data(path)

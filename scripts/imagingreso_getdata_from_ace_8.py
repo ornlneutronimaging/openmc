@@ -19,7 +19,7 @@ def get_temp(path):
     return temp_dict[_temp_key]
 
 
-def export_xs_data(path):
+def export_xs_data(path, database):
     ace = openmc.data.IncidentNeutron.from_ace(path, metastable_scheme='mcnp')
     temp = get_temp(path)
     # df1 = pd.DataFrame()
@@ -38,7 +38,7 @@ def export_xs_data(path):
         fname = ace.atomic_symbol + '-' + str(ace.mass_number) + '_' + name.split('_')[-1] + '.csv'
     else:
         fname = ace.atomic_symbol + '-' + str(ace.mass_number) + '.csv'
-    sub_dir = temp
+    sub_dir = database + '-' + temp
     if not os.path.exists(sub_dir):
         os.makedirs(sub_dir)
     df.to_csv(temp + '/' + fname, index=False, float_format='%g')
@@ -49,8 +49,8 @@ loc = pd.read_csv('/Users/y9z/Documents/database/Lib80x/xsdir.csv', ',', header=
 cwd = '/Users/y9z/Documents/database/Lib80x/'
 
 for each in loc[2]:
-    path = cwd + each
+    _path = cwd + each
     # print(path)
-    if '/Lib80x/Lib80x/B/5010.8' in path:
-        print(path)
-        export_xs_data(path)
+    if '/Lib80x/Lib80x/B/5010.8' in _path:
+        print(_path)
+        export_xs_data(_path, database='ENDF_VIII')
